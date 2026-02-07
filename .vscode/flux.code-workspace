@@ -1,0 +1,30 @@
+{
+  "folders": [
+    {
+      "name": "root",
+      "path": ".."
+    },
+    {
+      "name": "📱 Flux App (Flutter)",
+      "path": "../apps/flux_app"
+    },
+    {
+      "name": "🌐 Flux Landing (Astro)",
+      "path": "../apps/flux_landing"
+    },
+    {
+      "name": "🗄️ Backend (Supabase)",
+      "path": "../supabase"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.git": true,
+      "**/.DS_Store": true,
+      "**/node_modules": true,
+      "**/.dart_tool": true,
+      "**/build": true
+    },
+    "editor.formatOnSave": true
+  }
+}
