@@ -36,7 +36,7 @@ class AppointmentRepository {
           .map((json) => Appointment.fromJson(json))
           .toList();
     } catch (e) {
-      return [];
+      throw Exception('Failed to get appointments by organization: $e');
     }
   }
 
@@ -52,7 +52,7 @@ class AppointmentRepository {
           .map((json) => Appointment.fromJson(json))
           .toList();
     } catch (e) {
-      return [];
+      throw Exception('Failed to get appointments by client: $e');
     }
   }
 
@@ -66,7 +66,7 @@ class AppointmentRepository {
 
       return Appointment.fromJson(response);
     } catch (e) {
-      return null;
+      throw Exception('Failed to create appointment: $e');
     }
   }
 
@@ -81,7 +81,7 @@ class AppointmentRepository {
 
       return Appointment.fromJson(response);
     } catch (e) {
-      return null;
+      throw Exception('Failed to update appointment: $e');
     }
   }
 
@@ -94,7 +94,7 @@ class AppointmentRepository {
 
       return true;
     } catch (e) {
-      return false;
+      throw Exception('Failed to cancel appointment: $e');
     }
   }
 }

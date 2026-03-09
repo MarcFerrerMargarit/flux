@@ -6,6 +6,11 @@ final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
   return ProfileRepository(Supabase.instance.client);
 });
 
+final currentProfileProvider = FutureProvider.family<Profile?, String>((ref, userId) async {
+  final repo = ref.watch(profileRepositoryProvider);
+  return repo.getCurrentUserProfile(userId);
+});
+
 class ProfileRepository {
   final SupabaseClient _supabase;
 
@@ -17,12 +22,12 @@ class ProfileRepository {
           .from('profiles')
           .select('id, organization_id, role, full_name, phone, created_at')
           .eq('id', userId)
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return Profile.fromJson(response);
     } catch (e) {
-      print('Error getting profile: $e'); // Debug
-      return null;
+      throw Exception('Failed to get profile: $e');
     }
   }
 
@@ -37,7 +42,7 @@ class ProfileRepository {
 
       return (response as List).map((json) => Profile.fromJson(json)).toList();
     } catch (e) {
-      return [];
+      throw Exception('Failed to get clients for organization: $e');
     }
   }
 
@@ -52,7 +57,7 @@ class ProfileRepository {
 
       return Profile.fromJson(response);
     } catch (e) {
-      return null;
+      throw Exception('Failed to update profile: $e');
     }
   }
 }

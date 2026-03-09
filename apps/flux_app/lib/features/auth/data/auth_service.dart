@@ -22,7 +22,8 @@ class AuthService {
     }
   }
 
-  /// Registers a new OWNER and creates their organization
+  /// Registers a new OWNER and creates their organization in auth metadata.
+  /// The database trigger `on_auth_user_created` will handle table insertions.
   Future<AuthResponse> signUpOwner({
     required String email,
     required String password,
@@ -47,30 +48,6 @@ class AuthService {
         throw Exception('Failed to create user account');
       }
 
-      // Step 2: Create organization
-      final orgResponse = await _supabase
-          .from('organizations')
-          .insert({
-            'name': organizationName,
-            'invite_code': _generateInviteCode(organizationName),
-          })
-          .select()
-          .single();
-
-      final organizationId = orgResponse['id'] as String;
-
-      // Step 3: Create profile using RPC function (bypasses RLS)
-      await _supabase.rpc(
-        'create_user_profile',
-        params: {
-          'user_id': response.user!.id,
-          'user_role': 'OWNER',
-          'user_full_name': fullName,
-          'user_phone': phone,
-          'user_organization_id': organizationId,
-        },
-      );
-
       return response;
     } on AuthException catch (e) {
       throw Exception(e.message);
@@ -79,7 +56,7 @@ class AuthService {
     }
   }
 
-  /// Registers a new CLIENT without organization (can join later)
+  /// Registers a new CLIENT and adds metadata. Trigger handles db insertions.
   Future<AuthResponse> signUpClient({
     required String email,
     required String password,
@@ -98,18 +75,6 @@ class AuthService {
         throw Exception('Failed to create user account');
       }
 
-      // Step 2: Create profile WITHOUT organization_id using RPC (bypasses RLS)
-      await _supabase.rpc(
-        'create_user_profile',
-        params: {
-          'user_id': response.user!.id,
-          'user_role': 'CLIENT',
-          'user_full_name': fullName,
-          'user_phone': phone,
-          'user_organization_id': null,
-        },
-      );
-
       return response;
     } on AuthException catch (e) {
       throw Exception(e.message);
@@ -118,19 +83,20 @@ class AuthService {
     }
   }
 
-  /// Generates a simple invite code from organization name
-  String _generateInviteCode(String organizationName) {
-    final prefix = organizationName
-        .replaceAll(RegExp(r'[^a-zA-Z]'), '')
-        .toUpperCase()
-        .substring(
-          0,
-          organizationName.length >= 4 ? 4 : organizationName.length,
-        )
-        .padRight(4, 'X');
 
-    final random = DateTime.now().millisecondsSinceEpoch % 10000;
-    return '$prefix-$random';
+
+  /// Resends the confirmation email to the given email address.
+  Future<void> resendConfirmationEmail(String email) async {
+    try {
+      await _supabase.auth.resend(
+        type: OtpType.signup,
+        email: email,
+      );
+    } on AuthException catch (e) {
+      throw Exception(e.message);
+    } catch (e) {
+      throw Exception('Error al reenviar el email de confirmación.');
+    }
   }
 
   /// Signs out the current user.
@@ -140,6 +106,9 @@ class AuthService {
 
   /// Returns the current authenticated user, or null if not logged in.
   User? get currentUser => _supabase.auth.currentUser;
+
+  /// Whether the current user's email has been verified.
+  bool get isEmailVerified => _supabase.auth.currentUser?.emailConfirmedAt != null;
 
   /// Stream to listen to auth state changes (login, logout, token refresh).
   Stream<AuthState> get authStateChanges => _supabase.auth.onAuthStateChange;

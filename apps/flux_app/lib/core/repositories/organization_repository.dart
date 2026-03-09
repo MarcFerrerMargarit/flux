@@ -7,6 +7,11 @@ final organizationRepositoryProvider = Provider<OrganizationRepository>((ref) {
   return OrganizationRepository(Supabase.instance.client);
 });
 
+final userOrganizationsProvider = FutureProvider.family<List<UserOrganization>, String>((ref, userId) async {
+  final repo = ref.watch(organizationRepositoryProvider);
+  return repo.getUserOrganizations(userId);
+});
+
 class OrganizationRepository {
   final SupabaseClient _supabase;
 
@@ -18,11 +23,12 @@ class OrganizationRepository {
           .from('organizations')
           .select()
           .eq('id', organizationId)
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return Organization.fromJson(response);
     } catch (e) {
-      return null;
+      throw Exception('Failed to get organization: $e');
     }
   }
 
@@ -32,17 +38,18 @@ class OrganizationRepository {
           .from('organizations')
           .select()
           .eq('invite_code', inviteCode)
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return Organization.fromJson(response);
     } catch (e) {
-      return null;
+      throw Exception('Failed to get organization by invite code: $e');
     }
   }
 
   Future<Organization?> createOrganization(String name) async {
     try {
-      // Generate a simple invite code (you can make this more sophisticated)
+      // Generate a simple invite code
       final inviteCode = _generateInviteCode(name);
 
       final response = await _supabase
@@ -53,7 +60,7 @@ class OrganizationRepository {
 
       return Organization.fromJson(response);
     } catch (e) {
-      return null;
+      throw Exception('Failed to create organization: $e');
     }
   }
 
@@ -79,12 +86,16 @@ class OrganizationRepository {
     required String role,
     bool isPrimary = false,
   }) async {
-    await _supabase.from('user_organizations').insert({
-      'user_id': userId,
-      'organization_id': organizationId,
-      'role': role,
-      'is_primary': isPrimary,
-    });
+    try {
+      await _supabase.from('user_organizations').insert({
+        'user_id': userId,
+        'organization_id': organizationId,
+        'role': role,
+        'is_primary': isPrimary,
+      });
+    } catch (e) {
+      throw Exception('Failed to link user to organization: $e');
+    }
   }
 
   /// Get user's organizations
@@ -100,8 +111,7 @@ class OrganizationRepository {
           .map((json) => UserOrganization.fromJson(json))
           .toList();
     } catch (e) {
-      print('Error getting user organizations: $e');
-      return [];
+      throw Exception('Failed to get user organizations: $e');
     }
   }
 
@@ -113,12 +123,12 @@ class OrganizationRepository {
           .select()
           .eq('user_id', userId)
           .eq('is_primary', true)
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return UserOrganization.fromJson(response);
     } catch (e) {
-      print('Error getting primary organization: $e');
-      return null;
+      throw Exception('Failed to get primary organization: $e');
     }
   }
 
@@ -127,17 +137,21 @@ class OrganizationRepository {
     required String userId,
     required String organizationId,
   }) async {
-    // First, unset all primary flags for this user
-    await _supabase
-        .from('user_organizations')
-        .update({'is_primary': false})
-        .eq('user_id', userId);
+    try {
+      // First, unset all primary flags for this user
+      await _supabase
+          .from('user_organizations')
+          .update({'is_primary': false})
+          .eq('user_id', userId);
 
-    // Then set the new primary
-    await _supabase
-        .from('user_organizations')
-        .update({'is_primary': true})
-        .eq('user_id', userId)
-        .eq('organization_id', organizationId);
+      // Then set the new primary
+      await _supabase
+          .from('user_organizations')
+          .update({'is_primary': true})
+          .eq('user_id', userId)
+          .eq('organization_id', organizationId);
+    } catch (e) {
+      throw Exception('Failed to set primary organization: $e');
+    }
   }
 }

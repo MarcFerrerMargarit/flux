@@ -21,7 +21,7 @@ class ServiceRepository {
 
       return (response as List).map((json) => Service.fromJson(json)).toList();
     } catch (e) {
-      return [];
+      throw Exception('Failed to load services: $e');
     }
   }
 
@@ -31,11 +31,12 @@ class ServiceRepository {
           .from('services')
           .select()
           .eq('id', serviceId)
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return Service.fromJson(response);
     } catch (e) {
-      return null;
+      throw Exception('Failed to get service: $e');
     }
   }
 
@@ -49,7 +50,7 @@ class ServiceRepository {
 
       return Service.fromJson(response);
     } catch (e) {
-      return null;
+      throw Exception('Failed to create service: $e');
     }
   }
 
@@ -64,7 +65,7 @@ class ServiceRepository {
 
       return Service.fromJson(response);
     } catch (e) {
-      return null;
+      throw Exception('Failed to update service: $e');
     }
   }
 
@@ -73,7 +74,7 @@ class ServiceRepository {
       await _supabase.from('services').delete().eq('id', serviceId);
       return true;
     } catch (e) {
-      return false;
+      throw Exception('Failed to delete service: $e');
     }
   }
 }

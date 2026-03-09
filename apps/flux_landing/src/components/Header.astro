@@ -1,3 +1,7 @@
+---
+import { APP_URL } from '../config';
+---
+
 <header
   class="fixed w-full bg-white/80 backdrop-blur-md z-50 border-b border-gray-100"
 >
@@ -33,12 +37,12 @@
       </nav>
       <div class="flex items-center space-x-4">
         <a
-          href="#"
+          href={`${APP_URL}/#/login`}
           class="text-gray-600 hover:text-gray-900 font-medium no-underline"
           >Login</a
         >
         <a
-          href="#"
+          href={`${APP_URL}/#/signup`}
           class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium no-underline"
           >Empezar Ahora</a
         >

@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../core/models/profile.dart';
+
 import '../core/repositories/profile_repository.dart';
 import '../features/auth/ui/login_screen.dart';
 import '../features/auth/ui/loading_screen.dart';
+import '../features/auth/ui/email_verification_screen.dart';
 import '../features/auth/ui/signup_type_screen.dart';
 import '../features/auth/ui/owner_signup_screen.dart';
 import '../features/auth/ui/client_signup_screen.dart';
@@ -36,7 +37,6 @@ class GoRouterRefreshStream extends ChangeNotifier {
 /// Provider that holds the GoRouter configuration
 final routerProvider = Provider<GoRouter>((ref) {
   final supabase = Supabase.instance.client;
-  final profileRepo = ref.read(profileRepositoryProvider);
 
   return GoRouter(
     initialLocation: '/dashboard',
@@ -46,16 +46,26 @@ final routerProvider = Provider<GoRouter>((ref) {
     // 2. Global Redirect Logic (The "Guard")
     redirect: (context, state) async {
       final session = supabase.auth.currentSession;
+      final user = supabase.auth.currentUser;
       final isGoingToLogin = state.matchedLocation == '/login';
       final isGoingToSignup = state.matchedLocation.startsWith('/signup');
+      final isGoingToVerify = state.matchedLocation == '/verify-email';
 
       // If no session and not going to login or signup -> force to login
       if (session == null && !isGoingToLogin && !isGoingToSignup) {
         return '/login';
       }
 
-      // If session exists and trying to access login/signup -> force to dashboard
-      if (session != null && (isGoingToLogin || isGoingToSignup)) {
+      // If session exists but email not verified -> force to verify-email
+      if (session != null && user != null && user.emailConfirmedAt == null) {
+        if (!isGoingToVerify) {
+          return '/verify-email';
+        }
+        return null;
+      }
+
+      // If session exists, email verified, and trying to access login/signup/verify -> force to dashboard
+      if (session != null && (isGoingToLogin || isGoingToSignup || isGoingToVerify)) {
         return '/dashboard';
       }
 
@@ -86,6 +96,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ClientSignupScreen(),
       ),
       GoRoute(
+        path: '/verify-email',
+        name: 'verify-email',
+        builder: (context, state) {
+          final email = supabase.auth.currentUser?.email ?? '';
+          return EmailVerificationScreen(email: email);
+        },
+      ),
+      GoRoute(
         path: '/invite-code',
         name: 'invite-code',
         builder: (context, state) => const InviteCodeScreen(),
@@ -100,46 +118,74 @@ final routerProvider = Provider<GoRouter>((ref) {
             return const LoginScreen();
           }
 
-          return FutureBuilder<Profile?>(
-            future: profileRepo.getCurrentUserProfile(user.id),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const LoadingScreen();
-              }
+          return Consumer(
+            builder: (context, ref, child) {
+              final profileAsync = ref.watch(currentProfileProvider(user.id));
 
-              if (!snapshot.hasData || snapshot.data == null) {
-                // If profile doesn't exist, logout and go to login
-                supabase.auth.signOut();
-                return const LoginScreen();
-              }
+              return profileAsync.when(
+                data: (profile) {
+                  if (profile == null) {
+                    // Profile creation might have failed during signup or is missing
+                    return Scaffold(
+                      body: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Tu perfil está incompleto.',
+                                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Hubo un error al crear tu organización o perfil durante el registro. Por favor, asegúrate de aplicar la migración de base de datos o contacta con soporte.',
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 24),
+                              ElevatedButton(
+                                onPressed: () {
+                                  // Manual sign out lets the user decide, preventing infinite loops
+                                  supabase.auth.signOut();
+                                },
+                                child: const Text('Cerrar Sesión y Volver al Login'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }
 
-              final profile = snapshot.data!;
-
-              // For clients, check if they have an organization
-              if (profile.role.isClient) {
-                return FutureBuilder(
-                  future: ref
-                      .read(organizationRepositoryProvider)
-                      .getUserOrganizations(user.id),
-                  builder: (context, orgSnapshot) {
-                    if (orgSnapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const LoadingScreen();
-                    }
-
-                    final organizations = orgSnapshot.data ?? [];
-
-                    // If client has no organization, redirect to invite code screen
-                    if (organizations.isEmpty) {
-                      return const InviteCodeScreen();
-                    }
-
-                    return ClientDashboard(profile: profile);
-                  },
-                );
-              } else {
-                return ProDashboard(profile: profile);
-              }
+                  // For clients, check if they have an organization
+                  if (profile.role.isClient) {
+                    final orgsAsync = ref.watch(userOrganizationsProvider(user.id));
+                    
+                    return orgsAsync.when(
+                      data: (organizations) {
+                        // If client has no organization, redirect to invite code screen
+                        if (organizations.isEmpty) {
+                          return const InviteCodeScreen();
+                        }
+                        return ClientDashboard(profile: profile);
+                      },
+                      loading: () => const LoadingScreen(),
+                      error: (error, stack) => Scaffold(
+                        body: Center(child: Text('Error: $error')),
+                      ),
+                    );
+                  } else {
+                    return ProDashboard(profile: profile);
+                  }
+                },
+                loading: () => const LoadingScreen(),
+                error: (error, stack) => Scaffold(
+                  body: Center(child: Text('Error: $error')),
+                ),
+              );
             },
           );
         },
