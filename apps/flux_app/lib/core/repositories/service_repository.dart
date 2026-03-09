@@ -6,6 +6,12 @@ final serviceRepositoryProvider = Provider<ServiceRepository>((ref) {
   return ServiceRepository(Supabase.instance.client);
 });
 
+final servicesByOrganizationProvider =
+    FutureProvider.family<List<Service>, String>((ref, organizationId) async {
+  final repository = ref.watch(serviceRepositoryProvider);
+  return repository.getServicesByOrganization(organizationId);
+});
+
 class ServiceRepository {
   final SupabaseClient _supabase;
 
